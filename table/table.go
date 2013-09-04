@@ -6,10 +6,13 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+
+	"github.com/jaeyeom/gofiletable/filesystem"
 )
 
 type Table struct {
 	baseDirectory string
+	fileSystem filesystem.FileSystem
 }
 
 // encodeKey encodes key to base64 URL encoder to avoid illegal
@@ -25,7 +28,7 @@ func encodeKey(key []byte) []byte {
 // directory.
 func Create(baseDirectory string) (*Table, error) {
 	// TODO: Produce error if the table already exists.
-	tbl := Table{baseDirectory}
+	tbl := Table{baseDirectory, filesystem.OSFileSystem{}}
 	if err := tbl.Recover(); err != nil {
 		return nil, err
 	}
