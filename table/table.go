@@ -4,7 +4,6 @@ package table
 import (
 	"encoding/base64"
 	"io/ioutil"
-	"os"
 	"path/filepath"
 
 	"github.com/jaeyeom/gofiletable/filesystem"
@@ -12,7 +11,7 @@ import (
 
 type Table struct {
 	baseDirectory string
-	fileSystem filesystem.FileSystem
+	fileSystem    filesystem.FileSystem
 }
 
 // encodeKey encodes key to base64 URL encoder to avoid illegal
@@ -43,19 +42,19 @@ func Open(baseDirectory string) (*Table, error) {
 // Drop drops the table tbl. It removes all the data in the table and
 // the directory.
 func (tbl Table) Drop() error {
-	return os.RemoveAll(tbl.baseDirectory)
+	return tbl.fileSystem.RemoveAll(tbl.baseDirectory)
 }
 
 // Recover creates the table directory.
 func (tbl Table) Recover() error {
-	return os.MkdirAll(tbl.baseDirectory, 0700)
+	return tbl.fileSystem.MkdirAll(tbl.baseDirectory, 0700)
 }
 
 // Get gets the value of the key in the table.
 func (tbl Table) Get(key []byte) ([]byte, error) {
 	filename := string(encodeKey(key))
 	path := filepath.Join(tbl.baseDirectory, filename)
-	f, err := os.Open(path)
+	f, err := tbl.fileSystem.Open(path)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +66,7 @@ func (tbl Table) Get(key []byte) ([]byte, error) {
 func (tbl Table) Put(key []byte, value []byte) error {
 	filename := string(encodeKey(key))
 	path := filepath.Join(tbl.baseDirectory, filename)
-	f, err := os.Create(path)
+	f, err := tbl.fileSystem.Create(path)
 	if err != nil {
 		return err
 	}
@@ -80,5 +79,5 @@ func (tbl Table) Put(key []byte, value []byte) error {
 func (tbl Table) Remove(key []byte) error {
 	filename := string(encodeKey(key))
 	path := filepath.Join(tbl.baseDirectory, filename)
-	return os.Remove(path)
+	return tbl.fileSystem.Remove(path)
 }
