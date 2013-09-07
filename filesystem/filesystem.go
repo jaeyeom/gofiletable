@@ -12,7 +12,7 @@ type FileSystem interface {
 	MkdirAll(path string, perm os.FileMode) error
 	RemoveAll(path string) error
 	Open(name string) (io.ReadCloser, error)
-	Create(name string) (io.WriteCloser, error)
+	Create(name string) (io.ReadWriteCloser, error)
 	Remove(name string) error
 }
 
@@ -45,7 +45,7 @@ func (OSFileSystem) Open(name string) (io.ReadCloser, error) {
 // Create creates the named file mode 0666 (before umask), truncating
 // it if it already exists. If successful, returns a writer to the
 // file. If there is an error, it will be of type *PathError.
-func (OSFileSystem) Create(name string) (io.WriteCloser, error) {
+func (OSFileSystem) Create(name string) (io.ReadWriteCloser, error) {
 	return os.Create(name)
 }
 
