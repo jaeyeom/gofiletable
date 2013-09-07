@@ -7,8 +7,8 @@ import (
 )
 
 func TestCreateAndDrop(t *testing.T) {
-	tbl := Table{"/test-table-0002", filesystem.NewMemoryFileSystem()}
-	if err := tbl.Recover(); err != nil {
+	tbl, err := Create(TableOption{"/test-table-0002", filesystem.NewMemoryFileSystem()})
+	if err != nil {
 		t.Error("failed to create a table")
 	}
 	if err := tbl.Drop(); err != nil {
@@ -17,8 +17,8 @@ func TestCreateAndDrop(t *testing.T) {
 }
 
 func TestPutAndGet(t *testing.T) {
-	tbl := Table{"/test-table-0002", filesystem.NewMemoryFileSystem()}
-	if err := tbl.Recover(); err != nil {
+	tbl, err := Create(TableOption{"/test-table-0002", filesystem.NewMemoryFileSystem()})
+	if err != nil {
 		t.Error(err)
 	}
 	if err := tbl.Put([]byte("hello"), []byte("world")); err != nil {

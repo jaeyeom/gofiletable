@@ -9,7 +9,12 @@ import (
 	"github.com/jaeyeom/gofiletable/filesystem"
 )
 
-type Table struct {
+type TableOption struct {
+	BaseDirectory string
+	FileSystem    filesystem.FileSystem
+}
+
+type table struct {
 	baseDirectory string
 	fileSystem    filesystem.FileSystem
 }
@@ -25,9 +30,15 @@ func encodeKey(key []byte) []byte {
 
 // Create creates a table. Actually it just creates an empty
 // directory.
-func Create(baseDirectory string) (*Table, error) {
+func Create(option TableOption) (*table, error) {
 	// TODO: Produce error if the table already exists.
-	tbl := Table{baseDirectory, filesystem.OSFileSystem{}}
+	tbl := table{
+		baseDirectory: option.BaseDirectory,
+		fileSystem: option.FileSystem,
+	}
+	if tbl.fileSystem == nil {
+		tbl.fileSystem = filesystem.OSFileSystem{}
+	}
 	if err := tbl.Recover(); err != nil {
 		return nil, err
 	}
@@ -35,23 +46,23 @@ func Create(baseDirectory string) (*Table, error) {
 }
 
 // Open opens a table in the baseDirectory.
-func Open(baseDirectory string) (*Table, error) {
-	return Create(baseDirectory)
+func Open(option TableOption) (*table, error) {
+	return Create(option)
 }
 
 // Drop drops the table tbl. It removes all the data in the table and
 // the directory.
-func (tbl Table) Drop() error {
+func (tbl table) Drop() error {
 	return tbl.fileSystem.RemoveAll(tbl.baseDirectory)
 }
 
 // Recover creates the table directory.
-func (tbl Table) Recover() error {
+func (tbl table) Recover() error {
 	return tbl.fileSystem.MkdirAll(tbl.baseDirectory, 0700)
 }
 
 // Get gets the value of the key in the table.
-func (tbl Table) Get(key []byte) ([]byte, error) {
+func (tbl table) Get(key []byte) ([]byte, error) {
 	filename := string(encodeKey(key))
 	path := filepath.Join(tbl.baseDirectory, filename)
 	f, err := tbl.fileSystem.Open(path)
@@ -63,7 +74,7 @@ func (tbl Table) Get(key []byte) ([]byte, error) {
 }
 
 // Put writes the data into the table.
-func (tbl Table) Put(key []byte, value []byte) error {
+func (tbl table) Put(key []byte, value []byte) error {
 	filename := string(encodeKey(key))
 	path := filepath.Join(tbl.baseDirectory, filename)
 	f, err := tbl.fileSystem.Create(path)
@@ -76,7 +87,7 @@ func (tbl Table) Put(key []byte, value []byte) error {
 }
 
 // Remove removes an item in the table.
-func (tbl Table) Remove(key []byte) error {
+func (tbl table) Remove(key []byte) error {
 	filename := string(encodeKey(key))
 	path := filepath.Join(tbl.baseDirectory, filename)
 	return tbl.fileSystem.Remove(path)
