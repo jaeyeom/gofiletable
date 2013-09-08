@@ -15,7 +15,7 @@ type memoryFileSystem struct {
 }
 
 // NewMemoryFileSystem creates an in-memory file system.
-func NewMemoryFileSystem() *MemoryFileSystem {
+func NewMemoryFileSystem() *memoryFileSystem {
 	return &memoryFileSystem{
 		files: map[string][]byte{string(filepath.Separator): nil},
 	}
