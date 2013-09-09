@@ -16,41 +16,43 @@ type FileSystem interface {
 	Remove(name string) error
 }
 
-// OSFileSystem is a FileSystem implementation that just simply calls
+// osFileSystem is a FileSystem implementation that just simply calls
 // functions in the go os package library.
-type OSFileSystem struct {
+type osFileSystem struct {
 }
+
+var OSFileSystem osFileSystem = osFileSystem{}
 
 // MkdirAll creates a directory named path, along with any necessary
 // parents, and returns nil, or else returns an error. The permission
 // bits perm are used for all directories that MkdirAll creates. If
 // path is already a directory, MkdirAll does nothing and returns nil.
-func (OSFileSystem) MkdirAll(path string, perm os.FileMode) error {
+func (osFileSystem) MkdirAll(path string, perm os.FileMode) error {
 	return os.MkdirAll(path, perm)
 }
 
 // RemoveAll removes path and any children it contains. It removes
 // everything it can but returns the first error it encounters. If the
 // path does not exist, RemoveAll returns nil (no error).
-func (OSFileSystem) RemoveAll(path string) error {
+func (osFileSystem) RemoveAll(path string) error {
 	return os.RemoveAll(path)
 }
 
 // Open opens the named file for reading. If successful, methods on
 // the returned file can be used for reading.
-func (OSFileSystem) Open(name string) (io.ReadCloser, error) {
+func (osFileSystem) Open(name string) (io.ReadCloser, error) {
 	return os.Open(name)
 }
 
 // Create creates the named file mode 0666 (before umask), truncating
 // it if it already exists. If successful, returns a writer to the
 // file. If there is an error, it will be of type *PathError.
-func (OSFileSystem) Create(name string) (io.ReadWriteCloser, error) {
+func (osFileSystem) Create(name string) (io.ReadWriteCloser, error) {
 	return os.Create(name)
 }
 
 // Remove removes the named file or directory. If there is an error,
 // it will be of type *PathError.
-func (OSFileSystem) Remove(name string) error {
+func (osFileSystem) Remove(name string) error {
 	return os.Remove(name)
 }
