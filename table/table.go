@@ -2,9 +2,15 @@
 package table
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/base64"
+	"encoding/binary"
+	"errors"
+	"io"
 	"io/ioutil"
 	"path/filepath"
+	"time"
 
 	"github.com/jaeyeom/gofiletable/filesystem"
 )
@@ -12,11 +18,44 @@ import (
 type TableOption struct {
 	BaseDirectory string
 	FileSystem    filesystem.FileSystem
+	KeepSnapshots bool
 }
 
 type Table struct {
 	baseDirectory string
 	fileSystem    filesystem.FileSystem
+	keepSnapshots bool
+}
+
+type Header struct {
+	ByteSize  uint64
+	Snapshots []SnapshotInfo
+}
+
+type SnapshotInfo struct {
+	Timestamp uint64
+	ByteSize  uint64
+}
+
+type Snapshot struct {
+	Info  SnapshotInfo
+	Value []byte
+}
+
+type ByteReadCounter struct {
+	Reader *bufio.Reader
+	Count  uint64
+}
+
+func (brc *ByteReadCounter) Read(p []byte) (n int, err error) {
+	n, err = brc.Reader.Read(p)
+	brc.Count += uint64(n)
+	return
+}
+
+func (brc *ByteReadCounter) ReadByte() (c byte, err error) {
+	brc.Count += 1
+	return brc.Reader.ReadByte()
 }
 
 // encodeKey encodes key to base64 URL encoder to avoid illegal
@@ -34,7 +73,8 @@ func Create(option TableOption) (*Table, error) {
 	// TODO: Produce error if the table already exists.
 	tbl := Table{
 		baseDirectory: option.BaseDirectory,
-		fileSystem: option.FileSystem,
+		fileSystem:    option.FileSystem,
+		keepSnapshots: option.KeepSnapshots,
 	}
 	if tbl.fileSystem == nil {
 		tbl.fileSystem = filesystem.OSFileSystem
@@ -50,6 +90,76 @@ func Open(option TableOption) (*Table, error) {
 	return Create(option)
 }
 
+func readHeader(r *bufio.Reader) (header *Header, err error) {
+	brc := &ByteReadCounter{
+		Reader: r,
+		Count:  0,
+	}
+	header = &Header{}
+	header.ByteSize, err = binary.ReadUvarint(brc)
+	if err != nil {
+		return
+	}
+	snapshotSize, err := binary.ReadUvarint(brc)
+	if err != nil {
+		return
+	}
+	snapshots := make([]SnapshotInfo, snapshotSize)
+	for i := uint64(0); i < snapshotSize; i++ {
+		err = binary.Read(brc, binary.BigEndian, &snapshots[i].Timestamp)
+		if err != nil {
+			return
+		}
+		snapshots[i].ByteSize, err = binary.ReadUvarint(brc)
+		if err != nil {
+			return
+		}
+	}
+	if brc.Count > header.ByteSize {
+		err = errors.New("Header size does not match")
+		return
+	}
+	// TODO: Remove this when Seek() function is implemented.
+	for brc.Count < header.ByteSize {
+		if _, err = brc.ReadByte(); err != nil {
+			return
+		}
+
+	}
+	header.Snapshots = snapshots
+	return
+}
+
+func (header *Header) WriteTo(w io.Writer) (n int64, err error) {
+	buf := bytes.NewBuffer(nil)
+	bin := make([]byte, binary.MaxVarintLen64)
+	buf.Write(bin[0:binary.PutUvarint(bin, uint64(len(header.Snapshots)))])
+	for _, snapshot := range header.Snapshots {
+		binary.Write(buf, binary.BigEndian, snapshot.Timestamp)
+		buf.Write(bin[0:binary.PutUvarint(bin, snapshot.ByteSize)])
+	}
+	headerSizeSize := uint64(binary.PutUvarint(bin, header.ByteSize))
+	for header.ByteSize < headerSizeSize+uint64(buf.Len()) {
+		header.ByteSize = headerSizeSize + uint64(buf.Len())
+		headerSizeSize = uint64(binary.PutUvarint(bin, header.ByteSize))
+	}
+	n1, err := w.Write(bin[0:headerSizeSize])
+	n += int64(n1)
+	if err != nil {
+		return
+	}
+	n1, err = w.Write(buf.Bytes())
+	n += int64(n1)
+	for uint64(n) < header.ByteSize {
+		n1, err = w.Write([]byte{0})
+		n += int64(n1)
+		if err != nil {
+			return
+		}
+	}
+	return
+}
+
 // Drop drops the table tbl. It removes all the data in the table and
 // the directory.
 func (tbl Table) Drop() error {
@@ -63,26 +173,109 @@ func (tbl Table) Recover() error {
 
 // Get gets the value of the key in the table.
 func (tbl Table) Get(key []byte) ([]byte, error) {
-	filename := string(encodeKey(key))
-	path := filepath.Join(tbl.baseDirectory, filename)
-	f, err := tbl.fileSystem.Open(path)
-	if err != nil {
-		return nil, err
+	if !tbl.keepSnapshots {
+		filename := string(encodeKey(key))
+		path := filepath.Join(tbl.baseDirectory, filename)
+		f, err := tbl.fileSystem.Open(path)
+		if err != nil {
+			return nil, err
+		}
+		defer f.Close()
+		return ioutil.ReadAll(f)
 	}
-	defer f.Close()
-	return ioutil.ReadAll(f)
+	var value []byte
+	c, cerr := tbl.GetSnapshots(key)
+	for snapshot := range c {
+		value = snapshot.Value
+	}
+	return value, <-cerr
+}
+
+// GetSnapshots returns a channel of snapshot.
+func (tbl Table) GetSnapshots(key []byte) (<-chan *Snapshot, <-chan error) {
+	c := make(chan *Snapshot)
+	cerr := make(chan error, 1)
+	go func() {
+		defer close(c)
+		defer close(cerr)
+		filename := string(encodeKey(key))
+		path := filepath.Join(tbl.baseDirectory, filename)
+		f, err := tbl.fileSystem.Open(path)
+		if err != nil {
+			cerr <- err
+			return
+		}
+		defer f.Close()
+		r := bufio.NewReader(f)
+		h, err := readHeader(r)
+		if err != nil {
+			cerr <- err
+			return
+		}
+		if len(h.Snapshots) == 0 {
+			cerr <- errors.New("no snapshots")
+			return
+		}
+		for _, snapshot := range h.Snapshots {
+			value := make([]byte, snapshot.ByteSize)
+			_, err = r.Read(value)
+			if err != nil {
+				cerr <- err
+				break
+			}
+			c <- &Snapshot{snapshot, value}
+		}
+		return
+	}()
+	return c, cerr
 }
 
 // Put writes the data into the table.
 func (tbl Table) Put(key []byte, value []byte) error {
 	filename := string(encodeKey(key))
 	path := filepath.Join(tbl.baseDirectory, filename)
+	var header *Header
+	var valueArea []byte
+	if tbl.keepSnapshots {
+		f, err := tbl.fileSystem.Open(path)
+		if err == nil {
+			defer f.Close()
+			r := bufio.NewReader(f)
+			header, err = readHeader(r)
+			if err != nil {
+				return err
+			}
+			valueArea, err = ioutil.ReadAll(r)
+			if err != nil {
+				return err
+			}
+		} else {
+			header = &Header{
+				ByteSize:  16,
+				Snapshots: nil,
+			}
+		}
+	}
 	f, err := tbl.fileSystem.Create(path)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
+	if header != nil {
+		header.Snapshots = append(header.Snapshots, SnapshotInfo{uint64(time.Now().UnixNano()), uint64(len(value))})
+		header.WriteTo(f)
+	}
+
+	if valueArea != nil {
+		_, err = f.Write(valueArea)
+		if err != nil {
+			return err
+		}
+	}
 	_, err = f.Write(value)
+	if err != nil {
+		return err
+	}
 	return err
 }
 

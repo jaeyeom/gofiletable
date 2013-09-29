@@ -1,43 +1,109 @@
 package table
 
 import (
+	"fmt"
+	"os"
 	"testing"
 
 	"github.com/jaeyeom/gofiletable/filesystem"
 )
 
-func TestCreateAndDrop(t *testing.T) {
-	tbl, err := Create(TableOption{"/test-table-0002", filesystem.NewMemoryFileSystem()})
-	if err != nil {
-		t.Error("failed to create a table")
+func TestPutAndGet(t *testing.T) {
+	const (
+		getOp = iota
+		putOp
+	)
+	type Operation struct {
+		op    int
+		key   string
+		value string
+		err   error
 	}
-	if err := tbl.Drop(); err != nil {
-		t.Error("failed to drop a table")
+	examples := []struct {
+		tableOption TableOption
+		operations  []Operation
+	}{{
+		TableOption{"/test-table-0001", filesystem.NewMemoryFileSystem(), false},
+		[]Operation{},
+	}, {
+		TableOption{"/test-table-0002", filesystem.NewMemoryFileSystem(), true},
+		[]Operation{},
+	}, {
+		TableOption{"/test-table-0003", filesystem.NewMemoryFileSystem(), false},
+		[]Operation{
+			{putOp, "hello", "world", nil},
+			{putOp, "hello", "world2", nil},
+			{getOp, "world", "", os.ErrNotExist},
+			{getOp, "hello", "world2", nil},
+		},
+	}, {
+		TableOption{"/test-table-0004", filesystem.NewMemoryFileSystem(), true},
+		[]Operation{
+			{putOp, "hello", "world", nil},
+			{putOp, "hello", "world2", nil},
+			{getOp, "world", "", os.ErrNotExist},
+			{getOp, "hello", "world2", nil},
+		},
+	}}
+	for i, testCase := range examples {
+		tbl, err := Create(testCase.tableOption)
+		if err != nil {
+			t.Error(err)
+		}
+		for j, e := range testCase.operations {
+			if e.op == getOp {
+				value, err := tbl.Get([]byte(e.key))
+				if string(value) != e.value {
+					t.Errorf("%d.%d. %s expected but %s found", i, j, e.value, value)
+				}
+				if err != e.err {
+					t.Errorf("%d.%d. %v", i, j, err)
+				}
+			} else if e.op == putOp {
+				if err := tbl.Put([]byte(e.key), []byte(e.value)); err != e.err {
+					t.Errorf("%d.%d. %v", i, j, err)
+				}
+			}
+		}
+		if err := tbl.Drop(); err != nil {
+			t.Error(err)
+		}
 	}
 }
 
-func TestPutAndGet(t *testing.T) {
-	tbl, err := Create(TableOption{"/test-table-0002", filesystem.NewMemoryFileSystem()})
+func ExampleGetSnapshots() {
+	tbl, err := Create(TableOption{"/test-table-0000", filesystem.NewMemoryFileSystem(), true})
 	if err != nil {
-		t.Error(err)
+		fmt.Println(err)
 	}
-	if err := tbl.Put([]byte("hello"), []byte("world")); err != nil {
-		t.Error(err)
+	tbl.Put([]byte("key"), []byte("history1"))
+	tbl.Put([]byte("key"), []byte("history2"))
+	tbl.Put([]byte("key2"), []byte("history3"))
+	tbl.Put([]byte("key"), []byte("history4"))
+	c, cerr := tbl.GetSnapshots([]byte("key"))
+	for snapshot := range c {
+		fmt.Println(string(snapshot.Value))
 	}
-	value, _ := tbl.Get([]byte("world"))
-	if value != nil {
-		t.Errorf("nil expected but %s found", value)
+	fmt.Println(<-cerr)
+	c, cerr = tbl.GetSnapshots([]byte("key2"))
+	for snapshot := range c {
+		fmt.Println(string(snapshot.Value))
 	}
-	value, _ = tbl.Get([]byte("hello"))
-	if string(value) != "world" {
-		t.Errorf("world expected but %s found", value)
+	fmt.Println(<-cerr)
+	c, cerr = tbl.GetSnapshots([]byte("key3"))
+	for snapshot := range c {
+		fmt.Println(string(snapshot.Value))
 	}
-	tbl.Remove([]byte("hello"))
-	value, _ = tbl.Get([]byte("hello"))
-	if value != nil {
-		t.Errorf("nil expected but %s found", value)
-	}
+	fmt.Println(<-cerr)
 	if err := tbl.Drop(); err != nil {
-		t.Error(err)
+		fmt.Println(err)
 	}
+	// Output:
+	// history1
+	// history2
+	// history4
+	// <nil>
+	// history3
+	// <nil>
+	// file does not exist
 }
