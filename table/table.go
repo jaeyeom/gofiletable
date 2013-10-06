@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -61,10 +62,18 @@ func (brc *ByteReadCounter) ReadByte() (c byte, err error) {
 // encodeKey encodes key to base64 URL encoder to avoid illegal
 // characters in the filename.
 func encodeKey(key []byte) []byte {
-	size := (len(key) + 2) / 3 * 4
+	size := base64.URLEncoding.EncodedLen(len(key))
 	encoded := make([]byte, size)
 	base64.URLEncoding.Encode(encoded, key)
 	return encoded
+}
+
+// decodeKey decodes base64 URL to the key.
+func decodeKey(encoded []byte) ([]byte, error) {
+	size := base64.URLEncoding.DecodedLen(len(encoded))
+	key := make([]byte, size)
+	n, err := base64.URLEncoding.Decode(key, encoded)
+	return key[0:n], err
 }
 
 // Create creates a table. Actually it just creates an empty
@@ -284,4 +293,26 @@ func (tbl Table) Remove(key []byte) error {
 	filename := string(encodeKey(key))
 	path := filepath.Join(tbl.baseDirectory, filename)
 	return tbl.fileSystem.Remove(path)
+}
+
+// Keys returns a channel of keys.
+func (tbl Table) Keys() (c chan []byte) {
+	c = make(chan []byte)
+	walkFunc := func(path string, info os.FileInfo, err error) error {
+		if info.IsDir() {
+			return nil
+		}
+		name := info.Name()
+		key, err := decodeKey([]byte(name))
+		if err != nil {
+			return err
+		}
+		c <- key
+		return nil
+	}
+	go func() {
+		defer close(c)
+		tbl.fileSystem.Walk(tbl.baseDirectory, walkFunc)
+	}()
+	return c
 }

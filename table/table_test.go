@@ -95,6 +95,10 @@ func ExampleGetSnapshots() {
 		fmt.Println(string(snapshot.Value))
 	}
 	fmt.Println(<-cerr)
+	fmt.Println("KEYS:")
+	for key := range tbl.Keys() {
+		fmt.Println(string(key))
+	}
 	if err := tbl.Drop(); err != nil {
 		fmt.Println(err)
 	}
@@ -106,4 +110,7 @@ func ExampleGetSnapshots() {
 	// history3
 	// <nil>
 	// file does not exist
+	// KEYS:
+	// key
+	// key2
 }
