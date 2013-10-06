@@ -4,6 +4,7 @@ package filesystem
 import (
 	"io"
 	"os"
+	"path/filepath"
 )
 
 // FileSystem is an interface for a filesystem. It's possible to
@@ -14,6 +15,7 @@ type FileSystem interface {
 	Open(name string) (io.ReadCloser, error)
 	Create(name string) (io.ReadWriteCloser, error)
 	Remove(name string) error
+	Walk(root string, walkFn filepath.WalkFunc) error
 }
 
 // osFileSystem is a FileSystem implementation that just simply calls
@@ -55,4 +57,9 @@ func (osFileSystem) Create(name string) (io.ReadWriteCloser, error) {
 // it will be of type *PathError.
 func (osFileSystem) Remove(name string) error {
 	return os.Remove(name)
+}
+
+// Walk calls the default Walk function.
+func (osFileSystem) Walk(root string, walkFn filepath.WalkFunc) error {
+	return filepath.Walk(root, walkFn)
 }

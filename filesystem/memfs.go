@@ -6,7 +6,9 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 )
 
 // MemoryFileSystem is a fake file system.
@@ -25,7 +27,7 @@ func NewMemoryFileSystem() *MemoryFileSystem {
 type fileCloser struct {
 	bytes.Buffer
 	files *map[string][]byte
-	path string
+	path  string
 }
 
 // Close commits the buffer to the file system.
@@ -35,6 +37,41 @@ func (w *fileCloser) Close() error {
 		return err
 	}
 	(*w.files)[w.path] = buf
+	return nil
+}
+
+type MemoryFile struct {
+	path    string
+	content []byte
+	mode    os.FileMode
+	modTime time.Time
+}
+
+func (mf MemoryFile) Name() string {
+	return filepath.Base(mf.path)
+}
+
+func (mf MemoryFile) Size() int64 {
+	return int64(len(mf.content))
+}
+
+func (mf MemoryFile) Mode() os.FileMode {
+	return mf.mode
+}
+
+func (mf MemoryFile) ModTime() time.Time {
+	return mf.modTime
+}
+
+func (mf MemoryFile) IsDir() bool {
+	return mf.mode.IsDir()
+}
+
+func (mf MemoryFile) Sys() interface{} {
+	return nil
+}
+
+func (mf MemoryFile) Close() error {
 	return nil
 }
 
@@ -93,5 +130,34 @@ func (mfs MemoryFileSystem) Create(name string) (io.ReadWriteCloser, error) {
 func (mfs MemoryFileSystem) Remove(name string) error {
 	cleaned := filepath.Clean(name)
 	delete(mfs.files, cleaned)
+	return nil
+}
+
+// Walk implements filepath.Walk function for memory file system.
+func (mfs MemoryFileSystem) Walk(root string, walkFn filepath.WalkFunc) error {
+	cleaned := filepath.Clean(root)
+	paths := []string{}
+	for path, _ := range mfs.files {
+		if strings.HasPrefix(path, cleaned) {
+			paths = append(paths, path)
+		}
+	}
+	sort.Strings(paths)
+	for _, path := range paths {
+		// TODO: Provide the right information.
+		mode := os.FileMode(0777)
+		if strings.HasSuffix(path, "/") {
+			mode = mode | os.ModeDir
+		}
+		mf := MemoryFile{
+			path: path,
+			content: []byte{},
+			mode: mode,
+		}
+		err := walkFn(filepath.Clean(path), mf, nil)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
