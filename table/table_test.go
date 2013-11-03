@@ -44,6 +44,19 @@ func TestPutAndGet(t *testing.T) {
 			{getOp, "world", "", os.ErrNotExist},
 			{getOp, "hello", "world2", nil},
 		},
+	}, {
+		TableOption{"/test-table-0005", filesystem.NewMemoryFileSystem(), true},
+		[]Operation{
+			{putOp, "hello", "world", nil},
+			{putOp, "hello", "world1", nil},
+			{putOp, "hello", "world123", nil},
+			{putOp, "hello", "world45678", nil},
+			{putOp, "hello", "world9", nil},
+			{putOp, "hello", "world100", nil},
+			{putOp, "hello", "world23", nil},
+			{getOp, "world", "", os.ErrNotExist},
+			{getOp, "hello", "world23", nil},
+		},
 	}}
 	for i, testCase := range examples {
 		tbl, err := Create(testCase.tableOption)
