@@ -227,7 +227,7 @@ func (tbl Table) GetSnapshots(key []byte) (<-chan *Snapshot, <-chan error) {
 		}
 		for _, snapshot := range h.Snapshots {
 			value := make([]byte, snapshot.ByteSize)
-			_, err = r.Read(value)
+			_, err = io.ReadFull(r, value)
 			if err != nil {
 				cerr <- err
 				break
