@@ -65,9 +65,11 @@ func main() {
 	args := flag.Args()
 	if len(args) == 0 || (len(args) == 1 && args[0] == "help") {
 		help("")
+		return
 	}
 	if len(args) == 2 && args[0] == "help" {
 		help(args[1])
+		return
 	}
 	cmd := args[0]
 	if cmd == "ls" {
