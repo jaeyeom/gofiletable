@@ -29,7 +29,7 @@ type Table struct {
 }
 
 type Header struct {
-	ByteSize  uint64
+	ByteSize  uint64 // Size of the header binary representation
 	Snapshots []SnapshotInfo
 }
 
@@ -139,15 +139,22 @@ func readHeader(r *bufio.Reader) (header *Header, err error) {
 	return
 }
 
+// WriteTo writes the header to w and returns the number of bytes
+// actually written to w. Header size can be 16 and it will be
+// recalculated if the size is bigger.
 func (header *Header) WriteTo(w io.Writer) (n int64, err error) {
 	buf := bytes.NewBuffer(nil)
 	bin := make([]byte, binary.MaxVarintLen64)
+	// Write uint64 binary encoding of the snapshot size to buf.
 	buf.Write(bin[0:binary.PutUvarint(bin, uint64(len(header.Snapshots)))])
+	// Write each snapshot to buf.
 	for _, snapshot := range header.Snapshots {
 		binary.Write(buf, binary.BigEndian, snapshot.Timestamp)
 		buf.Write(bin[0:binary.PutUvarint(bin, snapshot.ByteSize)])
 	}
+	// Find the variable size of header size.
 	headerSizeSize := uint64(binary.PutUvarint(bin, header.ByteSize))
+	// Recalculate header byte size until it gets right.
 	for header.ByteSize < headerSizeSize+uint64(buf.Len()) {
 		header.ByteSize = headerSizeSize + uint64(buf.Len())
 		headerSizeSize = uint64(binary.PutUvarint(bin, header.ByteSize))
@@ -237,6 +244,33 @@ func (tbl Table) GetSnapshots(key []byte) (<-chan *Snapshot, <-chan error) {
 		return
 	}()
 	return c, cerr
+}
+
+// PutSnapshots rewrites the whole snapshots of the key with the given snapshots.
+func (tbl Table) PutSnapshots(key []byte, snapshots []Snapshot) error {
+	filename := string(encodeKey(key))
+	path := filepath.Join(tbl.baseDirectory, filename)
+	f, err := tbl.fileSystem.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	header := &Header{
+		ByteSize:  16,
+		Snapshots: []SnapshotInfo{},
+	}
+	for _, snapshot := range snapshots {
+		header.Snapshots = append(header.Snapshots, snapshot.Info)
+	}
+	header.WriteTo(f)
+	for _, snapshot := range snapshots {
+		_, err = f.Write(snapshot.Value)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Put writes the data into the table.

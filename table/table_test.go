@@ -127,3 +127,30 @@ func ExampleGetSnapshots() {
 	// key
 	// key2
 }
+
+func ExamplePutSnapshots() {
+	tbl, err := Create(TableOption{"/test-table-0000", filesystem.NewMemoryFileSystem(), true})
+	if err != nil {
+		fmt.Println(err)
+	}
+	tbl.PutSnapshots([]byte("key"), []Snapshot{{
+		Info: SnapshotInfo{100, 7},
+		Value: []byte("history"),
+	}, {
+		Info: SnapshotInfo{200, 8},
+		Value: []byte("history2"),
+	}, {
+		Info: SnapshotInfo{300, 5},
+		Value: []byte("test0"),
+	}})
+	c, cerr := tbl.GetSnapshots([]byte("key"))
+	for snapshot := range c {
+		fmt.Println(string(snapshot.Value))
+	}
+	fmt.Println(<-cerr)
+	// Output:
+	// history
+	// history2
+	// test0
+	// <nil>
+}
