@@ -73,6 +73,10 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func faviconHandler(w http.ResponseWriter, r *http.Request) {
+	return
+}
+
 func main() {
 	flag.Parse()
 	var err error
@@ -85,5 +89,6 @@ func main() {
 		return
 	}
 	http.HandleFunc("/", indexHandler)
+	http.HandleFunc("/favicon.ico", faviconHandler)
 	http.ListenAndServe(*addr, nil)
 }
