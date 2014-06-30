@@ -16,44 +16,56 @@ import (
 	"github.com/jaeyeom/gofiletable/filesystem"
 )
 
+// TableOption stores options for opening a table.
 type TableOption struct {
 	BaseDirectory string
 	FileSystem    filesystem.FileSystem
 	KeepSnapshots bool
 }
 
+// Table stores state of the table. The actual data isn't stored in the struct.
 type Table struct {
 	baseDirectory string
 	fileSystem    filesystem.FileSystem
 	keepSnapshots bool
 }
 
+// Header is a struct for the header of the table. It has the size of
+// header and also indexing of the snapshots.
 type Header struct {
 	ByteSize  uint64 // Size of the header binary representation
 	Snapshots []SnapshotInfo
 }
 
+// SnapshotInfo has the timestamp when the snapshot was written and
+// the bytesize of the snapshot. By adding the byte size, it's
+// possible to know the offset of the snapshot.
 type SnapshotInfo struct {
 	Timestamp uint64
 	ByteSize  uint64
 }
 
+// Snapshot has the SnapshotInfo and the actual value.
 type Snapshot struct {
 	Info  SnapshotInfo
 	Value []byte
 }
 
+// ByteReadCounter implements a counter that counts the number of
+// bytes read.
 type ByteReadCounter struct {
 	Reader *bufio.Reader
 	Count  uint64
 }
 
+// Read counts underlying reader while counting the number of bytes.
 func (brc *ByteReadCounter) Read(p []byte) (n int, err error) {
 	n, err = brc.Reader.Read(p)
 	brc.Count += uint64(n)
 	return
 }
 
+// ReadByte reads 1 byte from the reader.
 func (brc *ByteReadCounter) ReadByte() (c byte, err error) {
 	brc.Count += 1
 	return brc.Reader.ReadByte()
@@ -99,6 +111,8 @@ func Open(option TableOption) (*Table, error) {
 	return Create(option)
 }
 
+// readHeader reads header from the reader r and returns the header
+// struct.
 func readHeader(r *bufio.Reader) (header *Header, err error) {
 	brc := &ByteReadCounter{
 		Reader: r,
