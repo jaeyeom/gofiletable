@@ -30,6 +30,16 @@ type Table struct {
 	keepSnapshots bool
 }
 
+var (
+	// ErrHeaderSizeMismatch is returned when the header size does
+	// not match.
+	ErrHeaderSizeMismatch = errors.New("gofiletable: header size mismatch")
+
+	// ErrNoSnapshots is returned when there is no snapshots with
+	// a given key.
+	ErrNoSnapshots = errors.New("gofiletable: no snapshots")
+)
+
 // Header is a struct for the header of the table. It has the size of
 // header and also indexing of the snapshots.
 type Header struct {
@@ -112,7 +122,8 @@ func Open(option TableOption) (*Table, error) {
 }
 
 // readHeader reads header from the reader r and returns the header
-// struct.
+// struct. ErrHeaderSizeMismatch is returned when the header size does
+// not match.
 func readHeader(r *bufio.Reader) (header *Header, err error) {
 	brc := &ByteReadCounter{
 		Reader: r,
@@ -139,7 +150,7 @@ func readHeader(r *bufio.Reader) (header *Header, err error) {
 		}
 	}
 	if brc.Count > header.ByteSize {
-		err = errors.New("Header size does not match")
+		err = ErrHeaderSizeMismatch
 		return
 	}
 	// TODO: Remove this when Seek() function is implemented.
@@ -243,7 +254,7 @@ func (tbl Table) GetSnapshots(key []byte) (<-chan *Snapshot, <-chan error) {
 			return
 		}
 		if len(h.Snapshots) == 0 {
-			cerr <- errors.New("no snapshots")
+			cerr <- ErrNoSnapshots
 			return
 		}
 		for _, snapshot := range h.Snapshots {
