@@ -16,17 +16,28 @@ import (
 	"github.com/jaeyeom/gofiletable/filesystem"
 )
 
+// FileSystem is an interface for a filesystem. It's possible to
+// implement in-memory file system, for example.
+type FileSystem interface {
+	MkdirAll(path string, perm os.FileMode) error
+	RemoveAll(path string) error
+	Open(name string) (io.ReadCloser, error)
+	Create(name string) (io.ReadWriteCloser, error)
+	Remove(name string) error
+	Walk(root string, walkFn filepath.WalkFunc) error
+}
+
 // TableOption stores options for opening a table.
 type TableOption struct {
 	BaseDirectory string
-	FileSystem    filesystem.FileSystem
+	FileSystem    FileSystem
 	KeepSnapshots bool
 }
 
 // Table stores state of the table. The actual data isn't stored in the struct.
 type Table struct {
 	baseDirectory string
-	fileSystem    filesystem.FileSystem
+	fileSystem    FileSystem
 	keepSnapshots bool
 }
 

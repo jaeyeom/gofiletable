@@ -7,21 +7,9 @@ import (
 	"path/filepath"
 )
 
-// FileSystem is an interface for a filesystem. It's possible to
-// implement in-memory file system, for example.
-type FileSystem interface {
-	MkdirAll(path string, perm os.FileMode) error
-	RemoveAll(path string) error
-	Open(name string) (io.ReadCloser, error)
-	Create(name string) (io.ReadWriteCloser, error)
-	Remove(name string) error
-	Walk(root string, walkFn filepath.WalkFunc) error
-}
-
 // osFileSystem is a FileSystem implementation that just simply calls
 // functions in the go os package library.
-type osFileSystem struct {
-}
+type osFileSystem struct{}
 
 var OSFileSystem osFileSystem = osFileSystem{}
 
