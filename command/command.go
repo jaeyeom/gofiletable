@@ -1,5 +1,5 @@
 // Binary command is a command line tool for tables.
-package main
+package main // import "github.com/jaeyeom/gofiletable/command"
 
 import (
 	"flag"
