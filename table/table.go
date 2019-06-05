@@ -135,44 +135,45 @@ func Open(option TableOption) (*Table, error) {
 // readHeader reads header from the reader r and returns the header
 // struct. ErrHeaderSizeMismatch is returned when the header size does
 // not match.
-func readHeader(r *bufio.Reader) (header *Header, err error) {
+func readHeader(r *bufio.Reader) (*Header, error) {
 	brc := &ByteReadCounter{
 		Reader: r,
 		Count:  0,
 	}
-	header = &Header{}
-	header.ByteSize, err = binary.ReadUvarint(brc)
+	headerSize, err := binary.ReadUvarint(brc)
 	if err != nil {
-		return
+		return nil, err
 	}
 	snapshotSize, err := binary.ReadUvarint(brc)
 	if err != nil {
-		return
+		return nil, err
 	}
 	snapshots := make([]SnapshotInfo, snapshotSize)
 	for i := uint64(0); i < snapshotSize; i++ {
 		err = binary.Read(brc, binary.BigEndian, &snapshots[i].Timestamp)
 		if err != nil {
-			return
+			return nil, err
 		}
-		snapshots[i].ByteSize, err = binary.ReadUvarint(brc)
+		snapshotSize, err := binary.ReadUvarint(brc)
 		if err != nil {
-			return
+			return nil, err
 		}
+		snapshots[i].ByteSize = snapshotSize
 	}
-	if brc.Count > header.ByteSize {
-		err = ErrHeaderSizeMismatch
-		return
+	if brc.Count > headerSize {
+		return nil, ErrHeaderSizeMismatch
 	}
 	// TODO: Remove this when Seek() function is implemented.
-	for brc.Count < header.ByteSize {
+	for brc.Count < headerSize {
 		if _, err = brc.ReadByte(); err != nil {
-			return
+			return nil, err
 		}
 
 	}
-	header.Snapshots = snapshots
-	return
+	return &Header{
+		ByteSize:  headerSize,
+		Snapshots: snapshots,
+	}, nil
 }
 
 // WriteTo writes the header to w and returns the number of bytes

@@ -134,13 +134,13 @@ func ExamplePutSnapshots() {
 		fmt.Println(err)
 	}
 	tbl.PutSnapshots([]byte("key"), []Snapshot{{
-		Info: SnapshotInfo{100, 7},
+		Info:  SnapshotInfo{100, 7},
 		Value: []byte("history"),
 	}, {
-		Info: SnapshotInfo{200, 8},
+		Info:  SnapshotInfo{200, 8},
 		Value: []byte("history2"),
 	}, {
-		Info: SnapshotInfo{300, 5},
+		Info:  SnapshotInfo{300, 5},
 		Value: []byte("test0"),
 	}})
 	c, cerr := tbl.GetSnapshots([]byte("key"))
