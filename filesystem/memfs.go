@@ -19,25 +19,27 @@ type MemoryFileSystem struct {
 // NewMemoryFileSystem creates an in-memory file system.
 func NewMemoryFileSystem() *MemoryFileSystem {
 	return &MemoryFileSystem{
-		files: map[string][]byte{string(filepath.Separator): nil},
+		files: map[string][]byte{
+			string(filepath.Separator): nil,
+		},
 	}
 }
 
-// fileCloser is to implement Close function.
+type fileWriter interface {
+	// Writes file to the filesystem.
+	WriteFile(filename string, data []byte, perm os.FileMode) error
+}
+
+// fileCloser implements Close function in addition to bytes.Buffer.
 type fileCloser struct {
 	bytes.Buffer
-	files *map[string][]byte
-	path  string
+	fw   fileWriter
+	path string
 }
 
 // Close commits the buffer to the file system.
-func (w *fileCloser) Close() error {
-	buf, err := ioutil.ReadAll(w)
-	if err != nil {
-		return err
-	}
-	(*w.files)[w.path] = buf
-	return nil
+func (f *fileCloser) Close() error {
+	return f.fw.WriteFile(f.path, f.Bytes(), 0700)
 }
 
 type MemoryFile struct {
@@ -116,10 +118,10 @@ func (mfs MemoryFileSystem) Open(name string) (io.ReadCloser, error) {
 // exists, and returns a writer to the file.
 func (mfs MemoryFileSystem) Create(name string) (io.ReadWriteCloser, error) {
 	cleaned := filepath.Clean(name)
-	mfs.files[cleaned] = make([]byte, 0, 10)
+	mfs.files[cleaned] = nil
 	f := fileCloser{
 		*bytes.NewBuffer(mfs.files[cleaned]),
-		&mfs.files,
+		mfs,
 		name,
 	}
 	return &f, nil
@@ -147,17 +149,27 @@ func (mfs MemoryFileSystem) Walk(root string, walkFn filepath.WalkFunc) error {
 		// TODO: Provide the right information.
 		mode := os.FileMode(0777)
 		if strings.HasSuffix(path, "/") {
-			mode = mode | os.ModeDir
+			mode |= os.ModeDir
 		}
 		mf := MemoryFile{
-			path: path,
+			path:    path,
 			content: []byte{},
-			mode: mode,
+			mode:    mode,
 		}
 		err := walkFn(filepath.Clean(path), mf, nil)
 		if err != nil {
 			return err
 		}
 	}
+	return nil
+}
+
+// WriteFile writes data to a file named by filename. If the file does not
+// exist, WriteFile creates it with permissions perm; otherwise WriteFile
+// truncates it before writing.
+func (mfs MemoryFileSystem) WriteFile(filename string, data []byte, perm os.FileMode) error {
+	cleaned := filepath.Clean(filename)
+	mfs.files[cleaned] = data
+	_ = perm // TODO: Implement perm.
 	return nil
 }
