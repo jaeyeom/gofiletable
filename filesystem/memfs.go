@@ -2,6 +2,7 @@ package filesystem
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"io/ioutil"
 	"os"
@@ -35,11 +36,12 @@ type fileCloser struct {
 	bytes.Buffer
 	fw   fileWriter
 	path string
+	perm os.FileMode
 }
 
 // Close commits the buffer to the file system.
 func (f *fileCloser) Close() error {
-	return f.fw.WriteFile(f.path, f.Bytes(), 0700)
+	return f.fw.WriteFile(f.path, f.Bytes(), f.perm)
 }
 
 type MemoryFile struct {
@@ -77,17 +79,49 @@ func (mf MemoryFile) Close() error {
 	return nil
 }
 
+// ensureDirName returns a clean path with the directory suffix.
+func ensureDirName(path string) string {
+	cleaned := filepath.Clean(path)
+	if cleaned == string(filepath.Separator) {
+		return cleaned
+	}
+	return cleaned + string(filepath.Separator)
+}
+
+// parentDir returns a parent directory of the given path.
+func parentDir(path string) string {
+	return ensureDirName(filepath.Dir(filepath.Clean(path)))
+}
+
+// Mkdir creates a new directory with the specified name and permission bits
+// (before umask). If there is an error, it will be of type *os.PathError.
+func (mfs MemoryFileSystem) Mkdir(name string, perm os.FileMode) error {
+	current := filepath.Clean(name)
+	if _, exists := mfs.files[parentDir(current)]; !exists {
+		return &os.PathError{
+			Op:   "mkdir",
+			Path: name,
+			Err:  errors.New("No such file or directory"),
+		}
+	}
+	mfs.files[ensureDirName(current)] = nil
+	return nil
+}
+
 // MkdirAll creates a directory named path, along with any necessary
 // parents, and returns nil. The parameter perm is just for
 // compatibility and does nothing. If path is already a directory,
 // MkdirAll does nothing and returns nil.
 func (mfs MemoryFileSystem) MkdirAll(path string, perm os.FileMode) error {
 	current := filepath.Clean(path)
-	for current != "." && current != string(filepath.Separator) {
-		mfs.files[current+string(filepath.Separator)] = nil
-		current = filepath.Dir(current)
+	if current == "." || current == string(filepath.Separator) {
+		return nil
 	}
-	return nil
+	if _, exists := mfs.files[ensureDirName(current)]; exists {
+		return nil
+	}
+	mfs.MkdirAll(parentDir(current), perm)
+	return mfs.Mkdir(ensureDirName(current), perm)
 }
 
 // RemoveAll removes path and any children it contains. It removes
@@ -120,9 +154,10 @@ func (mfs MemoryFileSystem) Create(name string) (io.ReadWriteCloser, error) {
 	cleaned := filepath.Clean(name)
 	mfs.files[cleaned] = nil
 	f := fileCloser{
-		*bytes.NewBuffer(mfs.files[cleaned]),
-		mfs,
-		name,
+		Buffer: *bytes.NewBuffer(mfs.files[cleaned]),
+		fw:     mfs,
+		path:   name,
+		perm:   0666,
 	}
 	return &f, nil
 }
