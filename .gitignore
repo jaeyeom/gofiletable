@@ -1,0 +1,5 @@
+# Bazel files
+bazel-bin
+bazel-gofiletable
+bazel-out
+bazel-testlogs

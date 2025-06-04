@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "go_default_library",
+    srcs = ["web.go"],
+    importpath = "github.com/jaeyeom/gofiletable/web",
+    visibility = ["//visibility:private"],
+    deps = ["//table:go_default_library"],
+)
+
+go_binary(
+    name = "web",
+    embed = [":go_default_library"],
+    visibility = ["//visibility:public"],
+)

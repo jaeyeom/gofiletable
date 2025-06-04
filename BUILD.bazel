@@ -1,0 +1,27 @@
+load("@gazelle//:def.bzl", "gazelle")
+
+# gazelle:prefix github.com/jaeyeom/gofiletable
+
+# Gazelle configuration
+gazelle(
+    name = "gazelle",
+    command = "fix",
+    extra_args = [
+        "-build_file_name=BUILD.bazel",
+        "-repo_root=.",
+        "-go_naming_convention=go_default_library",
+        "-go_prefix=github.com/jaeyeom/gofiletable",
+    ],
+    prefix = "github.com/jaeyeom/gofiletable",
+)
+
+# Update BUILD.bazel files
+gazelle(
+    name = "gazelle-update-repos",
+    args = [
+        "-from_file=go.mod",
+        "-to_macro=deps.bzl%go_dependencies",
+        "-prune",
+    ],
+    command = "update-repos",
+)
